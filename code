@@ -1,0 +1,496 @@
+"""
+Кратенько о том, почему нет коммитов и жизнь кажется тихим ужасом:
+  у меня ничего не работало, три раза слетел код и я решила уже не заходить в хаб в vs
+  и жить счастливо, работая в рандомном файле (пустом и созданном мной!! я ни у кого файлы не забирала. добропорядочная.)
+Задание ООП:
+
+Вам необходимо реализовать 
+систему управления бронированием номеров в отеле (Hotel Booking System), 
+которая поддерживает различные типы операций: 
+AddRoom (добавление номера), 
+RegisterGuest (регистрация гостя), 
+CreateBooking (создание бронирования), 
+CancelBooking (отмена бронирования), 
+CheckIn (заезд) и 
+CheckOut (выезд). 
+
+Каждая операция должна:
+
+Иметь метод execute(hotel: Hotel).
+Менять состояние системы отеля.
+иметь возможность быть отмененной.
+Все изменения состояния системы отеля должны происходить только через эти операции.
+
+
+
+Реализуйте систему управления бронированием отелей с привязкой к гостям и номерам. В качестве ответа: ссылка на репозиторий с решением.
+"""
+
+
+
+class Hotel:
+    def __init__(self):
+        self.rooms = []
+        self.guests = []
+        self.bookings = []
+        self.operations_history = []
+
+class Room:
+    def __init__(self, room_number, room_type, price):
+        self.room_number = room_number
+        self.room_type = room_type
+        self.price = price
+        self.is_booked = False
+        self.is_occupied = False
+
+class Guest:
+    def __init__(self, guest_id, name, email):
+        self.guest_id = guest_id
+        self.name = name
+        self.email = email
+
+class Booking:
+    def __init__(self, booking_id, guest_id, room_number, start_date, end_date):
+        self.booking_id = booking_id
+        self.guest_id = guest_id
+        self.room_number = room_number
+        self.start_date = start_date
+        self.end_date = end_date
+        self.is_cancelled = False
+        self.is_checked_in = False
+
+'''класс для операций'''
+class Operation:
+    def execute(self, hotel):
+        pass
+    
+    def undo(self, hotel):
+        pass
+
+'''добавить номер'''
+class AddRoom(Operation):
+    def __init__(self, room_number, room_type, price):
+        self.room_number = room_number
+        self.room_type = room_type
+        self.price = price
+    
+    def execute(self, hotel):
+        '''проверим наличие'''
+        for room in hotel.rooms:
+            if room.room_number == self.room_number:
+                print(f"Номер {self.room_number} уже существует!")
+                return False
+        
+        room = Room(self.room_number, self.room_type, self.price)
+        hotel.rooms.append(room)
+        hotel.operations_history.append(self)
+        print(f"Добавлен номер {self.room_number}")
+        return True
+    
+    def undo(self, hotel):
+        for room in hotel.rooms:
+            if room.room_number == self.room_number:
+                hotel.rooms.remove(room)
+                print(f"Удален номер {self.room_number}")
+                return True
+        return False
+
+'''регистрируем гостя'''
+class RegisterGuest(Operation):
+    def __init__(self, guest_id, name, email):
+        self.guest_id = guest_id
+        self.name = name
+        self.email = email
+    
+    def execute(self, hotel):
+        '''нет ли такого гостя?'''
+        for guest in hotel.guests:
+            if guest.guest_id == self.guest_id:
+                print(f"Гость с ID {self.guest_id} уже зарегистрирован!")
+                return False
+        
+        guest = Guest(self.guest_id, self.name, self.email)
+        hotel.guests.append(guest)
+        hotel.operations_history.append(self)
+        print(f"Зарегистрирован гость {self.name} с ID {self.guest_id}")
+        return True
+    
+    def undo(self, hotel):
+        for guest in hotel.guests:
+            if guest.guest_id == self.guest_id:
+                hotel.guests.remove(guest)
+                print(f"Удален гость {self.name} с ID {self.guest_id}")
+                return True
+        return False
+
+''' бронь '''
+class CreateBooking(Operation):
+    def __init__(self, booking_id, guest_id, room_number, start_date, end_date):
+        self.booking_id = booking_id
+        self.guest_id = guest_id
+        self.room_number = room_number
+        self.start_date = start_date
+        self.end_date = end_date
+        self.original_room_state = None
+    
+    def execute(self, hotel):
+        ''' существует ли гость'''
+        guest_exists = False
+        for guest in hotel.guests:
+            if guest.guest_id == self.guest_id:
+                guest_exists = True
+                break
+        
+        if not guest_exists:
+            print(f"Гость с ID {self.guest_id} не найден!")
+            return False
+        
+        '''существует ли номер'''
+        room_found = None
+        for room in hotel.rooms:
+            if room.room_number == self.room_number:
+                room_found = room
+                break
+        
+        if not room_found:
+            print(f"Номер {self.room_number} не найден!")
+            return False
+        
+        '''свободен ли номер'''
+        if room_found.is_booked:
+            print(f"Номер {self.room_number} уже забронирован!")
+            return False
+        
+        '''сохраняем состояние номера'''
+        self.original_room_state = room_found.is_booked
+        
+        '''бронь'''
+        booking = Booking(self.booking_id, self.guest_id, self.room_number, self.start_date, self.end_date)
+        hotel.bookings.append(booking)
+        
+        '''изменяем статус номера'''
+        room_found.is_booked = True
+        
+        hotel.operations_history.append(self)
+        print(f"Создано бронирование {self.booking_id} для номера {self.room_number}")
+        return True
+    
+    def undo(self, hotel):
+        '''находим бронь'''
+        booking_found = None
+        for booking in hotel.bookings:
+            if booking.booking_id == self.booking_id:
+                booking_found = booking
+                break
+        
+        if booking_found:
+            hotel.bookings.remove(booking_found)
+        
+        '''находим номер + меняем статус'''
+        for room in hotel.rooms:
+            if room.room_number == self.room_number:
+                room.is_booked = self.original_room_state
+                break
+        
+        print(f"Отменено бронирование {self.booking_id}")
+        return True
+
+'''отмена брони'''
+class CancelBooking(Operation):
+    def __init__(self, booking_id):
+        self.booking_id = booking_id
+        self.cancelled_booking = None
+        self.original_room_state = None
+    
+    def execute(self, hotel):
+        '''ищем бронь'''
+        booking_found = None
+        for booking in hotel.bookings:
+            if booking.booking_id == self.booking_id and not booking.is_cancelled:
+                booking_found = booking
+                break
+        
+        if not booking_found:
+            print(f"Бронирование {self.booking_id} не найдено!")
+            return False
+        
+        '''сохраняем для отмены'''
+        self.cancelled_booking = booking_found
+        
+        '''ищем номер'''
+        for room in hotel.rooms:
+            if room.room_number == booking_found.room_number:
+                self.original_room_state = room.is_booked
+                room.is_booked = False
+                break
+        
+        ''' отмечаем бронь как отмененную '''
+        booking_found.is_cancelled = True
+        
+        hotel.operations_history.append(self)
+        print(f"Бронирование {self.booking_id} отменено")
+        return True
+    
+    def undo(self, hotel):
+        if not self.cancelled_booking:
+            return False
+        
+        '''dосстанавливаем бронирование и статус'''
+        self.cancelled_booking.is_cancelled = False
+        
+        for room in hotel.rooms:
+            if room.room_number == self.cancelled_booking.room_number:
+                room.is_booked = self.original_room_state
+                break
+        
+        print(f"Восстановлено бронирование {self.booking_id}")
+        return True
+
+'''заезд'''
+class CheckIn(Operation):
+    def __init__(self, booking_id):
+        self.booking_id = booking_id
+        self.original_room_occupied_state = None
+        self.original_booking_checked_in_state = None
+    
+    def execute(self, hotel):
+        '''бронь'''
+        booking_found = None
+        for booking in hotel.bookings:
+            if booking.booking_id == self.booking_id and not booking.is_cancelled:
+                booking_found = booking
+                break
+        
+        if not booking_found:
+            print(f"Бронирование {self.booking_id} не найдено!")
+            return False
+        
+        if booking_found.is_checked_in:
+            print(f"По бронированию {self.booking_id} уже произведен заезд!")
+            return False
+        
+        '''созраняем состояние'''
+        self.original_booking_checked_in_state = booking_found.is_checked_in
+        
+        '''находим номер'''
+        for room in hotel.rooms:
+            if room.room_number == booking_found.room_number:
+                self.original_room_occupied_state = room.is_occupied
+                room.is_occupied = True
+                break
+        
+        '''меняем статус бронирования'''
+        booking_found.is_checked_in = True
+        
+        hotel.operations_history.append(self)
+        print(f"Заезд по бронированию {self.booking_id} выполнен")
+        return True
+    
+    def undo(self, hotel):
+        '''находим бронирование'''
+        for booking in hotel.bookings:
+            if booking.booking_id == self.booking_id:
+                booking.is_checked_in = self.original_booking_checked_in_state
+                break
+        
+        '''находим номер'''
+        for room in hotel.rooms:
+            if room.room_number == booking.room_number:
+                room.is_occupied = self.original_room_occupied_state
+                break
+        
+        print(f"Отменен заезд по бронированию {self.booking_id}")
+        return True
+
+'''выезд'''
+class CheckOut(Operation):
+    def __init__(self, booking_id):
+        self.booking_id = booking_id
+        self.original_room_states = {}
+    
+    def execute(self, hotel):
+        '''находим бронирование'''
+        booking_found = None
+        for booking in hotel.bookings:
+            if booking.booking_id == self.booking_id and not booking.is_cancelled:
+                booking_found = booking
+                break
+        
+        if not booking_found:
+            print(f"Бронирование {self.booking_id} не найдено!")
+            return False
+        
+        if not booking_found.is_checked_in:
+            print(f"По бронированию {self.booking_id} не было заезда!")
+            return False
+        
+        '''находим номер'''
+        for room in hotel.rooms:
+            if room.room_number == booking_found.room_number:
+                '''сохраняем состояние'''
+                self.original_room_states = {
+                    'is_booked': room.is_booked,
+                    'is_occupied': room.is_occupied
+                }
+                '''освобождаем номер'''
+                room.is_booked = False
+                room.is_occupied = False
+                break
+        
+        '''удаляем бронирование'''
+        hotel.bookings.remove(booking_found)
+        
+        hotel.operations_history.append(self)
+        print(f"Выезд по бронированию {self.booking_id} выполнен")
+        return True
+    
+    def undo(self, hotel):
+        '''восстанавливаем бронирование'''
+        print(f"Отмена выезда для {self.booking_id} - бронирование удалено и не может быть восстановлено")
+        return False
+
+
+'''# Тесты'''
+def run_tests():
+    print("=" * 50)
+    print("тест системы бронирования")
+    print("=" * 50)
+
+    hotel = Hotel()
+    
+    print("Тест добавления номера:")
+    add_room_op = AddRoom(101, "Standard", 2500)
+    add_room_op.execute(hotel)
+
+    if len(hotel.rooms) == 1 and hotel.rooms[0].room_number == 101:
+        print("Номер добавлен успешно")
+    else:
+        print("Ошибка добавления номера")
+
+    print("Тест регистрации гостя:")
+    register_guest_op = RegisterGuest(1, "Чон Чонгук", "jung@mail.ru")
+    register_guest_op.execute(hotel)
+    
+    if len(hotel.guests) == 1 and hotel.guests[0].name == "Чон Чонгук":
+        print("Гость зарегистрирован успешно")
+    else:
+        print("Ошибка регистрации гостя")
+    
+    print("Тест создания брони:")
+    create_booking_op = CreateBooking(1001, 1, 101, "2027-01-01", "2027-01-05")
+    create_booking_op.execute(hotel)
+    
+    if len(hotel.bookings) == 1 and hotel.rooms[0].is_booked:
+        print("Бронирование создано успешно")
+    else:
+        print("Ошибка создания бронирования")
+
+    print("Тест заезда:")
+    check_in_op = CheckIn(1001)
+    check_in_op.execute(hotel)
+    
+    booking_found = None
+    for booking in hotel.bookings:
+        if booking.booking_id == 1001:
+            booking_found = booking
+            break
+    
+    if booking_found and booking_found.is_checked_in and hotel.rooms[0].is_occupied:
+        print("Заезд выполнен успешно")
+    else:
+        print("Ошибка заезда")
+    
+    print("Тест выезда:")
+    check_out_op = CheckOut(1001)
+    check_out_op.execute(hotel)
+    
+    if len(hotel.bookings) == 0 and not hotel.rooms[0].is_occupied and not hotel.rooms[0].is_booked:
+        print("Выезд выполнен успешно")
+    else:
+        print("Ошибка выезда")
+    
+    print("Тест отмены операций:")
+    
+    hotel2 = Hotel()
+    manager = OperationManager(hotel2)
+    add_op = AddRoom(102, "Luxury", 5000)
+    add_op.execute(hotel2)
+    
+    reg_op = RegisterGuest(2, "Пак Чимин", "jimin@mail.ru")
+    reg_op.execute(hotel2)
+    
+    book_op = CreateBooking(1002, 2, 102, "2027-02-01", "2027-02-03")
+    book_op.execute(hotel2)
+    
+    print(f"Состояние до отмен: комнат={len(hotel2.rooms)}, гостей={len(hotel2.guests)}, брони={len(hotel2.bookings)}")
+    
+    manager.undo_last_operation()
+    print(f"Состояние после отмены бронирования: комнат={len(hotel2.rooms)}, гостей={len(hotel2.guests)}, брони={len(hotel2.bookings)}")
+    
+    manager.undo_last_operation()
+    print(f"Состояние после отмены регистрации: комнат={len(hotel2.rooms)}, гостей={len(hotel2.guests)}, брони={len(hotel2.bookings)}")
+    
+    if len(hotel2.rooms) == 1 and len(hotel2.guests) == 0 and len(hotel2.bookings) == 0:
+        print("Отмена операций работает правильно")
+    else:
+        print("Ошибка отмены операций")
+    
+    print("ТЕСТИРОВАНИЕ ЗАВЕРШЕНО")
+
+# Демонстрация работы системы
+def demo():
+    print("ДЕМОНСТРАЦИЯ РАБОТЫ СИСТЕМЫ")
+    
+    hotel = Hotel()
+    
+    print("Добавим номера в отель:")
+    AddRoom(1, "однушка", 2000).execute(hotel)
+    AddRoom(2, "двушка", 3500).execute(hotel)
+    AddRoom(3, "трешка", 6000).execute(hotel)
+    
+    print("Регистрируем гостей:")
+    RegisterGuest(1, "Hoseok Jung", "jng@mail.ru").execute(hotel)
+    RegisterGuest(2, "Да Помогите", "jmn@mail.ru").execute(hotel)
+    
+    print("Создаем брони:")
+    CreateBooking(1, 1, 1, "2027-03-15", "2027-03-20").execute(hotel)
+    CreateBooking(2, 2, 2, "2027-03-18", "2027-03-22").execute(hotel)
+    
+    print("Состояние отеля:")
+    print(f"   Всего номеров: {len(hotel.rooms)}")
+    print(f"   Всего гостей: {len(hotel.guests)}")
+    print(f"   Всего бронирований: {len(hotel.bookings)}")
+    
+    print("Статусы номеров:")
+    for room in hotel.rooms:
+        status = "Свободен"
+        if room.is_occupied:
+            status = "Занят"
+        elif room.is_booked:
+            status = "Забронирован"
+        print(f"   Номер {room.room_number} ({room.room_type}): {status}")
+    
+    print("Выполняем заезд:")
+    CheckIn(1).execute(hotel)
+    
+    print("Обновленное состояние:")
+    for room in hotel.rooms:
+        status = "Свободен"
+        if room.is_occupied:
+            status = "Занят"
+        elif room.is_booked:
+            status = "Забронирован"
+        print(f"   Номер {room.room_number}: {status}")
+    
+    print("Отмена бронирования:")
+    CancelBooking(2).execute(hotel)
+    
+    print("\n" + "=" * 50)
+    print("ДЕМОНСТРАЦИЯ ЗАВЕРШЕНА")
+    print("=" * 50)
+
+if __name__ == "__main__":
+    run_tests()
+    demo()
+    
+    print("Система бронирования отеля готова к работе!")
